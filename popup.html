@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>New Tab Dashboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    referrerpolicy="no-referrer" />
+
+  <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+  <div class="bg" aria-hidden="true"></div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__title">Hi, <span class="brand__name" id="userName">Chatanya</span></div>
+        <div class="brand__subtitle">Your new tab, upgraded</div>
+      </div>
+
+      <div class="topbar__right">
+        <div class="clock" aria-label="Clock">
+          <div class="clock__time" id="clockTime">--:--</div>
+          <div class="clock__date" id="clockDate">---</div>
+        </div>
+
+        <div class="topbar__actions">
+          <button class="icon-btn" id="themeToggleBtn" type="button" aria-label="Toggle theme" title="Toggle theme">
+            <i class="fa-solid fa-moon" id="themeToggleIcon" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="main">
+        <div class="panel" data-panel="notes">
+          <div class="panel__header">
+            <div class="panel__title">
+              <i class="fa-solid fa-note-sticky" aria-hidden="true"></i>
+              Notes
+              <span class="badge badge--ghost" id="notesWordCount">0 words</span>
+            </div>
+            <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="notes" aria-label="Collapse Notes">
+              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+            </button> -->
+          </div>
+          <div class="panel__body">
+            <textarea class="textarea" id="notesArea" placeholder="Write anything…"></textarea>
+            <div class="row">
+              <button class="btn" id="notesSaveBtn" type="button">
+                <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+                Save
+              </button>
+              <button class="btn btn--ghost" id="notesClearBtn" type="button">
+                <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="widgets" aria-label="Widgets">
+        <div class="panel" data-panel="todos">
+          <div class="panel__header">
+            <div class="panel__title">
+              <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+              To-Do
+              <span class="badge" id="todoCount">0</span>
+            </div>
+            <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="todos" aria-label="Collapse To-Do">
+              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+            </button> -->
+          </div>
+
+          <div class="panel__body">
+            <form class="todo-add" id="todoForm">
+              <input class="input" id="todoInput" type="text" autocomplete="off" placeholder="Add a task…"
+                maxlength="200" />
+              <button class="btn" type="submit" id="todoAddBtn">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Add
+              </button>
+            </form>
+
+            <div class="list" id="todoList" aria-label="Todo list"></div>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="weather">
+          <div class="panel__header">
+            <div class="panel__title">
+              <i class="fa-solid fa-cloud-sun" aria-hidden="true"></i>
+              Weather
+            </div>
+            <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="weather" aria-label="Collapse Weather">
+              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+            </button> -->
+          </div>
+          <div class="panel__body">
+            <div class="weather" id="weatherWidget">
+              <div class="weather__icon" id="weatherIcon" aria-hidden="true">
+                <i class="fa-solid fa-sun" aria-hidden="true"></i>
+              </div>
+              <div class="weather__meta">
+                <div class="weather__temp" id="weatherTemp">--°C</div>
+                <div class="weather__desc" id="weatherDesc">Set up optional API for live weather</div>
+              </div>
+            </div>
+            <button class="btn btn--ghost" id="weatherRefreshBtn" type="button">
+              <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+              Refresh
+            </button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <nav class="dock" aria-label="Dock">
+      <div class="panel" data-panel="aiTools">
+        <div class="panel__header">
+          <div class="panel__title">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+            AI Tools
+          </div>
+          <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="aiTools" aria-label="Collapse AI Tools">
+            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+          </button> -->
+        </div>
+        <div class="panel__body">
+          <div class="tool-grid" id="aiToolsGrid" aria-label="AI tools"></div>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="search">
+        <div class="panel__header">
+          <div class="panel__title">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            Search
+          </div>
+          <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="search" aria-label="Collapse Search">
+            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+          </button> -->
+        </div>
+        <div class="panel__body">
+          <form class="search" id="searchForm" autocomplete="off">
+            <i class="fa-solid fa-magnifying-glass search__icon" aria-hidden="true"></i>
+            <input class="search__input" id="searchInput" type="text" placeholder="Search Google or type a URL" />
+            <button class="icon-btn" id="voiceBtn" type="button" aria-label="Voice search" title="Voice search">
+              <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+            </button>
+            <button class="btn search__btn" type="submit">
+              Go
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="apps">
+        <div class="panel__header">
+          <div class="panel__title">
+            <i class="fa-brands fa-google" aria-hidden="true"></i>
+            Google Apps
+          </div>
+          <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="apps" aria-label="Collapse Google Apps">
+            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+          </button> -->
+        </div>
+        <div class="panel__body">
+          <div class="app-grid" id="appsGrid" aria-label="Google apps"></div>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="bookmarks">
+        <div class="panel__header">
+          <div class="panel__title">
+            <i class="fa-solid fa-bookmark" aria-hidden="true"></i>
+            Bookmarks
+          </div>
+          <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="bookmarks" aria-label="Collapse Bookmarks">
+            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+          </button> -->
+        </div>
+
+        <div class="panel__body">
+          <form class="bookmark-add" id="bookmarkForm">
+            <input class="input" id="bookmarkName" type="text" placeholder="Name" maxlength="40" />
+            <input class="input" id="bookmarkUrl" type="text" placeholder="https://example.com" />
+            <button class="btn" type="submit">
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+              Add
+            </button>
+          </form>
+
+          <div class="bookmark-grid" id="bookmarkGrid" aria-label="Bookmarks"></div>
+          <div class="muted" id="bookmarkHint">Tip: Right-click (or long-press) a bookmark to delete.</div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="toast-area" id="toastArea" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="loading" id="loading" hidden>
+      <div class="loading__card">
+        <div class="loading-wave">
+          <div class="loading-bar"></div>
+          <div class="loading-bar"></div>
+          <div class="loading-bar"></div>
+          <div class="loading-bar"></div>
+        </div>
+        <div class="loading__text">Loading dashboard…</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
