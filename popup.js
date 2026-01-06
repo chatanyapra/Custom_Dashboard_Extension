@@ -3,9 +3,10 @@ const STORAGE_KEYS = {
     userName: "userName",
     collapsed: "collapsed",
     todos: "todos",
+    todos2: "todos2",
     bookmarks: "bookmarks",
     notes: "notes",
-    weather: "weather"
+    notes2: "notes2"
 };
 
 const DEFAULTS = {
@@ -14,22 +15,18 @@ const DEFAULTS = {
     collapsed: {
         aiTools: false,
         todos: false,
+        todos2: false,
         search: false,
         apps: false,
         bookmarks: false,
         notes: false,
-        weather: false
+        notes2: false
     },
     todos: [],
+    todos2: [],
     bookmarks: null,
     notes: "",
-    weather: {
-        mode: "static",
-        unit: "metric",
-        city: "",
-        apiKey: "",
-        last: null
-    }
+    notes2: ""
 };
 
 const AI_TOOLS = [
@@ -488,15 +485,15 @@ function bindDockPopovers() {
     });
 }
 
-function updateTodoCount(todos) {
-    const countEl = $("todoCount");
+function updateTodoCount(todos, countElId = "todoCount") {
+    const countEl = $(countElId);
     if (!countEl) return;
     const pending = (todos || []).filter((t) => !t.done).length;
     countEl.textContent = String(pending);
 }
 
-function renderTodos(todos) {
-    const list = $("todoList");
+function renderTodos(todos, listElId = "todoList") {
+    const list = $(listElId);
     if (!list) return;
 
     list.innerHTML = "";
@@ -507,7 +504,7 @@ function renderTodos(todos) {
         empty.className = "muted";
         empty.textContent = "No tasks yet. Add one to get started.";
         list.appendChild(empty);
-        updateTodoCount(items);
+        updateTodoCount(items, listElId === "todoList" ? "todoCount" : "todoCount2");
         return;
     }
 
@@ -536,11 +533,11 @@ function renderTodos(todos) {
         list.appendChild(row);
     }
 
-    updateTodoCount(items);
+    updateTodoCount(items, listElId === "todoList" ? "todoCount" : "todoCount2");
 }
 
-async function addTodo(state) {
-    const input = $("todoInput");
+async function addTodo(state, inputElId = "todoInput", listKey = "todos", renderListId = "todoList") {
+    const input = $(inputElId);
     if (!input) return;
 
     const text = input.value.trim();
@@ -556,51 +553,51 @@ async function addTodo(state) {
             done: false,
             createdAt: safeNowIso()
         },
-        ...(state.todos || [])
+        ...(state[listKey] || [])
     ];
 
-    state.todos = next;
-    const ok = await storageSet({ [STORAGE_KEYS.todos]: next });
+    state[listKey] = next;
+    const ok = await storageSet({ [STORAGE_KEYS[listKey]]: next });
     if (ok) {
         input.value = "";
-        renderTodos(next);
+        renderTodos(next, renderListId);
         toast("Task added", "success");
     }
 }
 
-async function toggleTodo(state, todoId, done) {
-    const todos = Array.isArray(state.todos) ? state.todos : [];
+async function toggleTodo(state, todoId, done, listKey = "todos", renderListId = "todoList") {
+    const todos = Array.isArray(state[listKey]) ? state[listKey] : [];
     const next = todos.map((t) => (t.id === todoId ? { ...t, done: Boolean(done) } : t));
-    state.todos = next;
-    const ok = await storageSet({ [STORAGE_KEYS.todos]: next });
+    state[listKey] = next;
+    const ok = await storageSet({ [STORAGE_KEYS[listKey]]: next });
     if (ok) {
-        renderTodos(next);
+        renderTodos(next, renderListId);
     }
 }
 
-async function deleteTodo(state, todoId) {
+async function deleteTodo(state, todoId, listKey = "todos", renderListId = "todoList") {
     const okConfirm = window.confirm("Delete this task?");
     if (!okConfirm) return;
 
-    const todos = Array.isArray(state.todos) ? state.todos : [];
+    const todos = Array.isArray(state[listKey]) ? state[listKey] : [];
     const next = todos.filter((t) => t.id !== todoId);
-    state.todos = next;
+    state[listKey] = next;
 
-    const ok = await storageSet({ [STORAGE_KEYS.todos]: next });
+    const ok = await storageSet({ [STORAGE_KEYS[listKey]]: next });
     if (ok) {
-        renderTodos(next);
+        renderTodos(next, renderListId);
         toast("Task deleted", "success");
     }
 }
 
-function bindTodos(state) {
-    const form = $("todoForm");
-    const list = $("todoList");
+function bindTodos(state, formId = "todoForm", listId = "todoList", inputId = "todoInput", listKey = "todos") {
+    const form = $(formId);
+    const list = $(listId);
 
     if (form) {
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
-            await addTodo(state);
+            await addTodo(state, inputId, listKey, listId);
         });
     }
 
@@ -613,7 +610,7 @@ function bindTodos(state) {
             if (!todoId) return;
 
             if (target?.classList?.contains("todo-del") || target?.closest?.(".todo-del")) {
-                await deleteTodo(state, todoId);
+                await deleteTodo(state, todoId, listKey, listId);
                 return;
             }
         });
@@ -628,7 +625,7 @@ function bindTodos(state) {
             const todoId = item.dataset.todoId;
             if (!todoId) return;
 
-            await toggleTodo(state, todoId, target.checked);
+            await toggleTodo(state, todoId, target.checked, listKey, listId);
         });
     }
 }
@@ -799,40 +796,40 @@ function countWords(text) {
     return t.split(/\s+/).filter(Boolean).length;
 }
 
-function updateWordCount(text) {
-    const el = $("notesWordCount");
+function updateWordCount(text, wordCountElId = "notesWordCount") {
+    const el = $(wordCountElId);
     if (!el) return;
     el.textContent = `${countWords(text)} words`;
 }
 
-async function saveNotes(state, text, showToast = true) {
-    state.notes = text;
-    const ok = await storageSet({ [STORAGE_KEYS.notes]: text });
+async function saveNotes(state, text, showToast = true, stateKey = "notes", storageKey = "notes") {
+    state[stateKey] = text;
+    const ok = await storageSet({ [STORAGE_KEYS[storageKey]]: text });
     if (ok && showToast) toast("Notes saved", "success");
 }
 
-function bindNotes(state) {
-    const area = $("notesArea");
-    const saveBtn = $("notesSaveBtn");
-    const clearBtn = $("notesClearBtn");
+function bindNotes(state, areaId = "notesArea", saveBtnId = "notesSaveBtn", clearBtnId = "notesClearBtn", wordCountElId = "notesWordCount", stateKey = "notes", storageKey = "notes") {
+    const area = $(areaId);
+    const saveBtn = $(saveBtnId);
+    const clearBtn = $(clearBtnId);
 
     if (!area) return;
 
-    area.value = state.notes || "";
-    updateWordCount(area.value);
+    area.value = state[stateKey] || "";
+    updateWordCount(area.value, wordCountElId);
 
     const debouncedAutosave = debounce(async () => {
-        await saveNotes(state, area.value, false);
+        await saveNotes(state, area.value, false, stateKey, storageKey);
     }, 450);
 
     area.addEventListener("input", () => {
-        updateWordCount(area.value);
+        updateWordCount(area.value, wordCountElId);
         debouncedAutosave();
     });
 
     if (saveBtn) {
         saveBtn.addEventListener("click", async () => {
-            await saveNotes(state, area.value, true);
+            await saveNotes(state, area.value, true, stateKey, storageKey);
         });
     }
 
@@ -841,8 +838,8 @@ function bindNotes(state) {
             const okConfirm = window.confirm("Clear notes? This cannot be undone.");
             if (!okConfirm) return;
             area.value = "";
-            updateWordCount("");
-            await saveNotes(state, "", true);
+            updateWordCount("", wordCountElId);
+            await saveNotes(state, "", true, stateKey, storageKey);
         });
     }
 }
@@ -883,83 +880,6 @@ function bindThemeToggle(state) {
     });
 }
 
-async function refreshWeather(state, showToast = true) {
-    const iconEl = $("weatherIcon");
-    const tempEl = $("weatherTemp");
-    const descEl = $("weatherDesc");
-
-    const setStatic = () => {
-        if (iconEl) iconEl.innerHTML = '<i class="fa-solid fa-sun" aria-hidden="true"></i>';
-        if (tempEl) tempEl.textContent = "24°C";
-        if (descEl) descEl.textContent = "Sunny (static)";
-    };
-
-    const cfg = state.weather || DEFAULTS.weather;
-
-    if (!cfg.apiKey || !cfg.city) {
-        setStatic();
-        return;
-    }
-
-    try {
-        if (descEl) descEl.textContent = "Loading…";
-
-        const url = new URL("https://api.openweathermap.org/data/2.5/weather");
-        url.searchParams.set("q", cfg.city);
-        url.searchParams.set("appid", cfg.apiKey);
-        url.searchParams.set("units", cfg.unit || "metric");
-
-        const resp = await fetch(url.toString(), { method: "GET" });
-        if (!resp.ok) {
-            throw new Error(`Weather HTTP ${resp.status}`);
-        }
-
-        const data = await resp.json();
-        const t = Math.round(Number(data?.main?.temp));
-        const desc = String(data?.weather?.[0]?.description || "").trim();
-
-        if (tempEl) tempEl.textContent = Number.isFinite(t) ? `${t}°${cfg.unit === "imperial" ? "F" : "C"}` : "--";
-        if (descEl) descEl.textContent = desc ? desc : "Live weather";
-
-        const main = String(data?.weather?.[0]?.main || "").toLowerCase();
-        const iconClass =
-            main.includes("cloud")
-                ? "fa-cloud"
-                : main.includes("rain")
-                    ? "fa-cloud-rain"
-                    : main.includes("snow")
-                        ? "fa-snowflake"
-                        : main.includes("storm")
-                            ? "fa-bolt"
-                            : "fa-sun";
-
-        if (iconEl) iconEl.innerHTML = `<i class="fa-solid ${iconClass}" aria-hidden="true"></i>`;
-
-        state.weather = {
-            ...cfg,
-            last: { temp: t, desc, at: safeNowIso() }
-        };
-        await storageSet({ [STORAGE_KEYS.weather]: state.weather });
-
-        if (showToast) toast("Weather updated", "success");
-    } catch (e) {
-        console.error("refreshWeather failed", e);
-        setStatic();
-        if (showToast) toast("Weather unavailable, using static", "warn");
-    }
-}
-
-function bindWeather(state) {
-    const btn = $("weatherRefreshBtn");
-    if (btn) {
-        btn.addEventListener("click", async () => {
-            btn.disabled = true;
-            await refreshWeather(state, true);
-            btn.disabled = false;
-        });
-    }
-}
-
 function ensureDefaultBookmarks(existing) {
     if (Array.isArray(existing) && existing.length > 0) return existing;
     return GOOGLE_APPS.map((a) => ({
@@ -980,9 +900,10 @@ async function init() {
         userName: DEFAULTS.userName,
         collapsed: { ...DEFAULTS.collapsed },
         todos: [...DEFAULTS.todos],
+        todos2: [...DEFAULTS.todos2],
         bookmarks: null,
         notes: DEFAULTS.notes,
-        weather: { ...DEFAULTS.weather }
+        notes2: DEFAULTS.notes2
     };
 
     const saved = await storageGet({
@@ -990,18 +911,20 @@ async function init() {
         [STORAGE_KEYS.userName]: DEFAULTS.userName,
         [STORAGE_KEYS.collapsed]: DEFAULTS.collapsed,
         [STORAGE_KEYS.todos]: DEFAULTS.todos,
+        [STORAGE_KEYS.todos2]: DEFAULTS.todos2,
         [STORAGE_KEYS.bookmarks]: DEFAULTS.bookmarks,
         [STORAGE_KEYS.notes]: DEFAULTS.notes,
-        [STORAGE_KEYS.weather]: DEFAULTS.weather
+        [STORAGE_KEYS.notes2]: DEFAULTS.notes2
     });
 
     state.theme = saved[STORAGE_KEYS.theme] || DEFAULTS.theme;
     state.userName = typeof saved[STORAGE_KEYS.userName] === "string" ? saved[STORAGE_KEYS.userName] : DEFAULTS.userName;
     state.collapsed = { ...DEFAULTS.collapsed, ...(saved[STORAGE_KEYS.collapsed] || {}) };
     state.todos = Array.isArray(saved[STORAGE_KEYS.todos]) ? saved[STORAGE_KEYS.todos] : [];
+    state.todos2 = Array.isArray(saved[STORAGE_KEYS.todos2]) ? saved[STORAGE_KEYS.todos2] : [];
     state.bookmarks = ensureDefaultBookmarks(saved[STORAGE_KEYS.bookmarks]);
     state.notes = typeof saved[STORAGE_KEYS.notes] === "string" ? saved[STORAGE_KEYS.notes] : "";
-    state.weather = { ...DEFAULTS.weather, ...(saved[STORAGE_KEYS.weather] || {}) };
+    state.notes2 = typeof saved[STORAGE_KEYS.notes2] === "string" ? saved[STORAGE_KEYS.notes2] : "";
 
     setTheme(state.theme);
     state.userName = setUserName(state.userName);
@@ -1010,6 +933,7 @@ async function init() {
     renderToolGrid();
     renderAppsGrid();
     renderTodos(state.todos);
+    renderTodos(state.todos2, "todoList2");
     renderBookmarks(state.bookmarks);
 
     bindThemeToggle(state);
@@ -1018,12 +942,12 @@ async function init() {
     bindDockPopovers();
     bindSearch();
     bindTodos(state);
+    bindTodos(state, "todoForm2", "todoList2", "todoInput2", "todos2");
     bindBookmarks(state);
     bindNotes(state);
-    bindWeather(state);
+    bindNotes(state, "notesArea2", "notesSaveBtn2", "notesClearBtn2", "notesWordCount2", "notes2", "notes2");
 
     startClock();
-    await refreshWeather(state, false);
 
     await storageSet({
         [STORAGE_KEYS.userName]: state.userName,

@@ -49,9 +49,6 @@
               Notes
               <span class="badge badge--ghost" id="notesWordCount">0 words</span>
             </div>
-            <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="notes" aria-label="Collapse Notes">
-              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
-            </button> -->
           </div>
           <div class="panel__body">
             <textarea class="textarea" id="notesArea" placeholder="Write anything…"></textarea>
@@ -61,6 +58,29 @@
                 Save
               </button>
               <button class="btn btn--ghost" id="notesClearBtn" type="button">
+                <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="notes2" style="margin-top: 18px;">
+          <div class="panel__header">
+            <div class="panel__title">
+              <i class="fa-solid fa-note-sticky" aria-hidden="true"></i>
+              Notes (2)
+              <span class="badge badge--ghost" id="notesWordCount2">0 words</span>
+            </div>
+          </div>
+          <div class="panel__body">
+            <textarea class="textarea" id="notesArea2" placeholder="Write anything…"></textarea>
+            <div class="row">
+              <button class="btn" id="notesSaveBtn2" type="button">
+                <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+                Save
+              </button>
+              <button class="btn btn--ghost" id="notesClearBtn2" type="button">
                 <i class="fa-solid fa-trash" aria-hidden="true"></i>
                 Clear
               </button>
@@ -96,30 +116,26 @@
           </div>
         </div>
 
-        <div class="panel" data-panel="weather">
+        <div class="panel" data-panel="todos2">
           <div class="panel__header">
             <div class="panel__title">
-              <i class="fa-solid fa-cloud-sun" aria-hidden="true"></i>
-              Weather
+              <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+              To-Do (2)
+              <span class="badge" id="todoCount2">0</span>
             </div>
-            <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="weather" aria-label="Collapse Weather">
-              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
-            </button> -->
           </div>
+
           <div class="panel__body">
-            <div class="weather" id="weatherWidget">
-              <div class="weather__icon" id="weatherIcon" aria-hidden="true">
-                <i class="fa-solid fa-sun" aria-hidden="true"></i>
-              </div>
-              <div class="weather__meta">
-                <div class="weather__temp" id="weatherTemp">--°C</div>
-                <div class="weather__desc" id="weatherDesc">Set up optional API for live weather</div>
-              </div>
-            </div>
-            <button class="btn btn--ghost" id="weatherRefreshBtn" type="button">
-              <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-              Refresh
-            </button>
+            <form class="todo-add" id="todoForm2">
+              <input class="input" id="todoInput2" type="text" autocomplete="off" placeholder="Add a task…"
+                maxlength="200" />
+              <button class="btn" type="submit" id="todoAddBtn2">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Add
+              </button>
+            </form>
+
+            <div class="list" id="todoList2" aria-label="Todo list 2"></div>
           </div>
         </div>
       </aside>
