@@ -6,12 +6,14 @@ const STORAGE_KEYS = {
     todos2: "todos2",
     bookmarks: "bookmarks",
     notes: "notes",
-    notes2: "notes2"
+    notes2: "notes2",
+    codingQuestions: "codingQuestions",
+    shortcuts: "shortcuts"
 };
 
 const DEFAULTS = {
     theme: "dark",
-    userName: "Chatanya",
+    userName: "Devansh",
     collapsed: {
         aiTools: false,
         todos: false,
@@ -20,13 +22,17 @@ const DEFAULTS = {
         apps: false,
         bookmarks: false,
         notes: false,
-        notes2: false
+        notes2: false,
+        codingQuestions: false,
+        shortcuts: false
     },
     todos: [],
     todos2: [],
     bookmarks: null,
     notes: "",
-    notes2: ""
+    notes2: "",
+    codingQuestions: [],
+    shortcuts: []
 };
 
 const AI_TOOLS = [
@@ -375,6 +381,73 @@ function normalizeUrlForNavigation(input) {
 
     const candidate = `${httpPreferred ? "http" : "https"}://${raw}`;
     return isSafeProtocol(candidate, allowed) ? candidate : null;
+}
+
+function bindTopbarSearch() {
+    const form = $("topbarSearchForm");
+    const input = $("topbarSearchInput");
+    const voiceBtn = $("topbarVoiceBtn");
+
+    if (form && input) {
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const q = input.value.trim();
+            if (!q) {
+                toast("Type something to search", "warn");
+                return;
+            }
+
+            const url = normalizeUrlForNavigation(q);
+            if (url) {
+                window.location.href = url;
+                return;
+            }
+
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+            window.location.href = searchUrl;
+        });
+    }
+
+    if (voiceBtn && input) {
+        voiceBtn.addEventListener("click", () => {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                toast("Voice search not supported in this browser", "warn");
+                return;
+            }
+
+            try {
+                voiceBtn.disabled = true;
+                const rec = new SpeechRecognition();
+                rec.lang = navigator.language || "en-US";
+                rec.interimResults = false;
+                rec.maxAlternatives = 1;
+
+                rec.onresult = (event) => {
+                    const text = event.results?.[0]?.[0]?.transcript;
+                    if (text) {
+                        input.value = text;
+                        toast("Voice input captured", "success");
+                    }
+                };
+
+                rec.onerror = (err) => {
+                    console.error("speech error", err);
+                    toast("Voice search failed", "error");
+                };
+
+                rec.onend = () => {
+                    voiceBtn.disabled = false;
+                };
+
+                rec.start();
+            } catch (e) {
+                console.error("SpeechRecognition start failed", e);
+                voiceBtn.disabled = false;
+                toast("Voice search failed", "error");
+            }
+        });
+    }
 }
 
 function bindSearch() {
@@ -808,6 +881,405 @@ async function saveNotes(state, text, showToast = true, stateKey = "notes", stor
     if (ok && showToast) toast("Notes saved", "success");
 }
 
+function updateQuestionCount(questions) {
+    const countEl = $("questionCount");
+    if (!countEl) return;
+    countEl.textContent = `${questions.length} questions`;
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+}
+
+function isCheckboxDue(dateAdded, daysOffset) {
+    const added = new Date(dateAdded);
+    const now = new Date();
+    const dueDate = new Date(added);
+    dueDate.setDate(dueDate.getDate() + daysOffset);
+    return now >= dueDate;
+}
+
+function getCheckboxStatus(dateAdded, daysOffset, completedDates) {
+    const dueDate = new Date(dateAdded);
+    dueDate.setDate(dueDate.getDate() + daysOffset);
+    const dueDateString = dueDate.toISOString().split('T')[0];
+    
+    return {
+        isDue: isCheckboxDue(dateAdded, daysOffset),
+        isCompleted: completedDates.includes(dueDateString),
+        dueDate: dueDateString
+    };
+}
+
+function renderQuestions(questions) {
+    const table = $("questionsTable");
+    if (!table) return;
+
+    table.innerHTML = "";
+    const items = Array.isArray(questions) ? questions : [];
+
+    if (items.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No questions yet. Add one to get started.";
+        table.appendChild(empty);
+        updateQuestionCount(items);
+        return;
+    }
+
+    // Create table
+    const tableEl = document.createElement("table");
+    tableEl.className = "question-table";
+    
+    // Create header
+    const thead = document.createElement("thead");
+    thead.innerHTML = `
+        <tr>
+            <th>Question</th>
+            <th>Date Added</th>
+            <th>Day 3</th>
+            <th>Day 7</th>
+            <th>Day 15</th>
+            <th>Actions</th>
+        </tr>
+    `;
+    tableEl.appendChild(thead);
+
+    // Create body
+    const tbody = document.createElement("tbody");
+    
+    for (const question of items) {
+        const row = document.createElement("tr");
+        row.className = "question-row";
+        row.dataset.questionId = question.id;
+
+        const completedDates = question.completedDates || [];
+        
+        // Get checkbox statuses
+        const day3Status = getCheckboxStatus(question.dateAdded, 3, completedDates);
+        const day7Status = getCheckboxStatus(question.dateAdded, 7, completedDates);
+        const day15Status = getCheckboxStatus(question.dateAdded, 15, completedDates);
+
+        row.innerHTML = `
+            <td class="question-name">${escapeHtml(question.name)}</td>
+            <td class="question-date">${formatDate(question.dateAdded)}</td>
+            <td class="checkbox-cell">
+                <input type="checkbox" class="rep-checkbox" data-days="3" 
+                    ${day3Status.isCompleted ? 'checked' : ''} 
+                    ${!day3Status.isDue ? 'data-not-due="true"' : ''}>
+                <span class="due-date ${!day3Status.isDue ? 'not-due' : ''}">${formatDate(day3Status.dueDate)}</span>
+            </td>
+            <td class="checkbox-cell">
+                <input type="checkbox" class="rep-checkbox" data-days="7" 
+                    ${day7Status.isCompleted ? 'checked' : ''} 
+                    ${!day7Status.isDue ? 'data-not-due="true"' : ''}>
+                <span class="due-date ${!day7Status.isDue ? 'not-due' : ''}">${formatDate(day7Status.dueDate)}</span>
+            </td>
+            <td class="checkbox-cell">
+                <input type="checkbox" class="rep-checkbox" data-days="15" 
+                    ${day15Status.isCompleted ? 'checked' : ''} 
+                    ${!day15Status.isDue ? 'data-not-due="true"' : ''}>
+                <span class="due-date ${!day15Status.isDue ? 'not-due' : ''}">${formatDate(day15Status.dueDate)}</span>
+            </td>
+            <td class="actions-cell">
+                <button class="btn btn--small btn--ghost delete-question" type="button">
+                    <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+            </td>
+        `;
+
+        tbody.appendChild(row);
+    }
+
+    tableEl.appendChild(tbody);
+    table.appendChild(tableEl);
+    updateQuestionCount(items);
+}
+
+async function addQuestion(state) {
+    const input = $("questionInput");
+    if (!input) return;
+
+    const name = input.value.trim();
+    if (!name) {
+        toast("Question name cannot be empty", "warn");
+        return;
+    }
+
+    const next = [
+        {
+            id: createId("question"),
+            name,
+            dateAdded: safeNowIso(),
+            completedDates: []
+        },
+        ...(state.codingQuestions || [])
+    ];
+
+    state.codingQuestions = next;
+    const ok = await storageSet({ [STORAGE_KEYS.codingQuestions]: next });
+    if (ok) {
+        input.value = "";
+        renderQuestions(next);
+        toast("Question added", "success");
+    }
+}
+
+async function toggleQuestionCheckbox(state, questionId, days, checked) {
+    const questions = Array.isArray(state.codingQuestions) ? state.codingQuestions : [];
+    const question = questions.find(q => q.id === questionId);
+    
+    if (!question) return;
+
+    const dueDate = new Date(question.dateAdded);
+    dueDate.setDate(dueDate.getDate() + days);
+    const dueDateString = dueDate.toISOString().split('T')[0];
+
+    let completedDates = question.completedDates || [];
+    
+    if (checked) {
+        if (!completedDates.includes(dueDateString)) {
+            completedDates.push(dueDateString);
+        }
+    } else {
+        completedDates = completedDates.filter(date => date !== dueDateString);
+    }
+
+    const next = questions.map(q => 
+        q.id === questionId ? { ...q, completedDates } : q
+    );
+
+    state.codingQuestions = next;
+    const ok = await storageSet({ [STORAGE_KEYS.codingQuestions]: next });
+    if (ok) {
+        renderQuestions(next);
+    }
+}
+
+async function deleteQuestion(state, questionId) {
+    const okConfirm = window.confirm("Delete this question?");
+    if (!okConfirm) return;
+
+    const questions = Array.isArray(state.codingQuestions) ? state.codingQuestions : [];
+    const next = questions.filter(q => q.id !== questionId);
+    state.codingQuestions = next;
+
+    const ok = await storageSet({ [STORAGE_KEYS.codingQuestions]: next });
+    if (ok) {
+        renderQuestions(next);
+        toast("Question deleted", "success");
+    }
+}
+
+function bindQuestions(state) {
+    const form = $("questionForm");
+    const table = $("questionsTable");
+
+    if (form) {
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            await addQuestion(state);
+        });
+    }
+
+    if (table) {
+        table.addEventListener("click", async (e) => {
+            const target = e.target;
+            
+            // Handle delete button
+            if (target.classList.contains("delete-question") || target.closest(".delete-question")) {
+                const row = target.closest(".question-row");
+                if (!row) return;
+                const questionId = row.dataset.questionId;
+                if (questionId) {
+                    await deleteQuestion(state, questionId);
+                }
+                return;
+            }
+        });
+
+        table.addEventListener("change", async (e) => {
+            const target = e.target;
+            if (!(target instanceof HTMLInputElement)) return;
+            if (!target.classList.contains("rep-checkbox")) return;
+
+            const row = target.closest(".question-row");
+            if (!row) return;
+            const questionId = row.dataset.questionId;
+            const days = parseInt(target.dataset.days);
+            
+            if (questionId && days) {
+                await toggleQuestionCheckbox(state, questionId, days, target.checked);
+            }
+        });
+    }
+}
+
+function sanitizeShortcutName(name) {
+    const n = String(name || "").trim();
+    if (!n) return "";
+    return n.slice(0, 30);
+}
+
+function normalizeShortcutUrl(url) {
+    const normalized = normalizeUrlForNavigation(url);
+    if (!normalized) return null;
+    return isSafeProtocol(normalized, new Set(["http:", "https:"])) ? normalized : null;
+}
+
+function renderShortcuts(shortcuts) {
+    const grid = $("shortcutGrid");
+    if (!grid) return;
+
+    const items = Array.isArray(shortcuts) ? shortcuts : [];
+    grid.innerHTML = "";
+
+    if (items.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No shortcuts yet. Add your favorites.";
+        grid.appendChild(empty);
+        return;
+    }
+
+    for (const s of items) {
+        const el = document.createElement("div");
+        el.className = "shortcut";
+        el.tabIndex = 0;
+        el.dataset.shortcutId = s.id;
+
+        const favUrl = deriveFaviconUrl(s.url);
+
+        el.innerHTML = `
+      <div class="shortcut__top">
+        <div class="shortcut__favicon">
+          ${favUrl ? `<img alt="" src="${favUrl}" />` : '<i class="fa-solid fa-globe" aria-hidden="true"></i>'}
+        </div>
+        <div class="shortcut__name">${escapeHtml(s.name)}</div>
+      </div>
+      <div class="shortcut__url">${escapeHtml(s.url)}</div>
+    `;
+
+        const open = () => openInNewTab(s.url);
+        el.addEventListener("click", open);
+        el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") open();
+        });
+
+        grid.appendChild(el);
+    }
+}
+
+async function deleteShortcut(state, shortcutId) {
+    const okConfirm = window.confirm("Delete this shortcut?");
+    if (!okConfirm) return;
+
+    const items = Array.isArray(state.shortcuts) ? state.shortcuts : [];
+    const next = items.filter((s) => s.id !== shortcutId);
+    state.shortcuts = next;
+
+    const ok = await storageSet({ [STORAGE_KEYS.shortcuts]: next });
+    if (ok) {
+        renderShortcuts(next);
+        toast("Shortcut deleted", "success");
+    }
+}
+
+async function addShortcut(state) {
+    const nameEl = $("shortcutName");
+    const urlEl = $("shortcutUrl");
+    if (!nameEl || !urlEl) return;
+
+    const name = sanitizeShortcutName(nameEl.value);
+    const url = normalizeShortcutUrl(urlEl.value);
+
+    if (!isNonEmptyString(name)) {
+        toast("Shortcut name is required", "warn");
+        return;
+    }
+
+    if (!url) {
+        toast("Enter a valid URL", "warn");
+        return;
+    }
+
+    const items = Array.isArray(state.shortcuts) ? state.shortcuts : [];
+    const next = [
+        {
+            id: createId("sc"),
+            name,
+            url,
+            createdAt: safeNowIso()
+        },
+        ...items
+    ];
+
+    state.shortcuts = next;
+    const ok = await storageSet({ [STORAGE_KEYS.shortcuts]: next });
+    if (ok) {
+        nameEl.value = "";
+        urlEl.value = "";
+        renderShortcuts(next);
+        toast("Shortcut added", "success");
+    }
+}
+
+function bindShortcuts(state) {
+    const form = $("shortcutForm");
+    const grid = $("shortcutGrid");
+
+    if (form) {
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            await addShortcut(state);
+        });
+    }
+
+    if (!grid) return;
+
+    grid.addEventListener("contextmenu", async (e) => {
+        const target = e.target;
+        const item = target?.closest?.(".shortcut");
+        if (!item) return;
+
+        e.preventDefault();
+        const id = item.dataset.shortcutId;
+        if (id) await deleteShortcut(state, id);
+    });
+
+    let longPressTimer = null;
+    grid.addEventListener("pointerdown", (e) => {
+        const target = e.target;
+        const item = target?.closest?.(".shortcut");
+        if (!item) return;
+
+        const id = item.dataset.shortcutId;
+        if (!id) return;
+
+        longPressTimer = window.setTimeout(async () => {
+            longPressTimer = null;
+            await deleteShortcut(state, id);
+        }, 650);
+    });
+
+    const cancelLongPress = () => {
+        if (longPressTimer) {
+            window.clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    };
+
+    grid.addEventListener("pointerup", cancelLongPress);
+    grid.addEventListener("pointerleave", cancelLongPress);
+    grid.addEventListener("pointercancel", cancelLongPress);
+    grid.addEventListener("pointermove", cancelLongPress);
+}
+
 function bindNotes(state, areaId = "notesArea", saveBtnId = "notesSaveBtn", clearBtnId = "notesClearBtn", wordCountElId = "notesWordCount", stateKey = "notes", storageKey = "notes") {
     const area = $(areaId);
     const saveBtn = $(saveBtnId);
@@ -903,7 +1375,9 @@ async function init() {
         todos2: [...DEFAULTS.todos2],
         bookmarks: null,
         notes: DEFAULTS.notes,
-        notes2: DEFAULTS.notes2
+        notes2: DEFAULTS.notes2,
+        codingQuestions: [...DEFAULTS.codingQuestions],
+        shortcuts: [...DEFAULTS.shortcuts]
     };
 
     const saved = await storageGet({
@@ -914,7 +1388,9 @@ async function init() {
         [STORAGE_KEYS.todos2]: DEFAULTS.todos2,
         [STORAGE_KEYS.bookmarks]: DEFAULTS.bookmarks,
         [STORAGE_KEYS.notes]: DEFAULTS.notes,
-        [STORAGE_KEYS.notes2]: DEFAULTS.notes2
+        [STORAGE_KEYS.notes2]: DEFAULTS.notes2,
+        [STORAGE_KEYS.codingQuestions]: DEFAULTS.codingQuestions,
+        [STORAGE_KEYS.shortcuts]: DEFAULTS.shortcuts
     });
 
     state.theme = saved[STORAGE_KEYS.theme] || DEFAULTS.theme;
@@ -925,6 +1401,8 @@ async function init() {
     state.bookmarks = ensureDefaultBookmarks(saved[STORAGE_KEYS.bookmarks]);
     state.notes = typeof saved[STORAGE_KEYS.notes] === "string" ? saved[STORAGE_KEYS.notes] : "";
     state.notes2 = typeof saved[STORAGE_KEYS.notes2] === "string" ? saved[STORAGE_KEYS.notes2] : "";
+    state.codingQuestions = Array.isArray(saved[STORAGE_KEYS.codingQuestions]) ? saved[STORAGE_KEYS.codingQuestions] : [];
+    state.shortcuts = Array.isArray(saved[STORAGE_KEYS.shortcuts]) ? saved[STORAGE_KEYS.shortcuts] : [];
 
     setTheme(state.theme);
     state.userName = setUserName(state.userName);
@@ -935,15 +1413,20 @@ async function init() {
     renderTodos(state.todos);
     renderTodos(state.todos2, "todoList2");
     renderBookmarks(state.bookmarks);
+    renderQuestions(state.codingQuestions);
+    renderShortcuts(state.shortcuts);
 
     bindThemeToggle(state);
     bindUserNameEditor(state);
     bindCollapsibles(state);
     bindDockPopovers();
+    bindTopbarSearch();
     bindSearch();
     bindTodos(state);
     bindTodos(state, "todoForm2", "todoList2", "todoInput2", "todos2");
     bindBookmarks(state);
+    bindQuestions(state);
+    bindShortcuts(state);
     bindNotes(state);
     bindNotes(state, "notesArea2", "notesSaveBtn2", "notesClearBtn2", "notesWordCount2", "notes2", "notes2");
 
