@@ -22,8 +22,21 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand__title">Hi, <span class="brand__name" id="userName">Chatanya</span></div>
+        <div class="brand__title">Hi, <span class="brand__name" id="userName">Devansh</span></div>
         <div class="brand__subtitle">Your new tab, upgraded</div>
+      </div>
+
+      <div class="topbar__search">
+        <form class="topbar-search" id="topbarSearchForm" autocomplete="off">
+          <i class="fa-solid fa-magnifying-glass search__icon" aria-hidden="true"></i>
+          <input class="search__input" id="topbarSearchInput" type="text" placeholder="Search Google or type a URL" />
+          <button class="icon-btn" id="topbarVoiceBtn" type="button" aria-label="Voice search" title="Voice search">
+            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+          </button>
+          <button class="btn search__btn" type="submit">
+            Go
+          </button>
+        </form>
       </div>
 
       <div class="topbar__right">
@@ -42,26 +55,25 @@
 
     <main class="layout">
       <section class="main">
-        <div class="panel" data-panel="notes">
+        <div class="panel" data-panel="codingQuestions">
           <div class="panel__header">
             <div class="panel__title">
-              <i class="fa-solid fa-note-sticky" aria-hidden="true"></i>
-              Notes
-              <span class="badge badge--ghost" id="notesWordCount">0 words</span>
+              <i class="fa-solid fa-code" aria-hidden="true"></i>
+              Coding Questions
+              <span class="badge badge--ghost" id="questionCount">0 questions</span>
             </div>
           </div>
           <div class="panel__body">
-            <textarea class="textarea" id="notesArea" placeholder="Write anything…"></textarea>
-            <div class="row">
-              <button class="btn" id="notesSaveBtn" type="button">
-                <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
-                Save
+            <form class="question-add" id="questionForm">
+              <input class="input" id="questionInput" type="text" autocomplete="off" placeholder="Enter coding question name..."
+                maxlength="200" />
+              <button class="btn" type="submit" id="questionAddBtn">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Add
               </button>
-              <button class="btn btn--ghost" id="notesClearBtn" type="button">
-                <i class="fa-solid fa-trash" aria-hidden="true"></i>
-                Clear
-              </button>
-            </div>
+            </form>
+
+            <div class="questions-table" id="questionsTable" aria-label="Coding questions table"></div>
           </div>
         </div>
 
@@ -157,27 +169,25 @@
         </div>
       </div>
 
-      <div class="panel" data-panel="search">
+      <div class="panel" data-panel="shortcuts">
         <div class="panel__header">
           <div class="panel__title">
-            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-            Search
+            <i class="fa-solid fa-star" aria-hidden="true"></i>
+            My Shortcuts
           </div>
-          <!-- <button class="icon-btn panel__toggle" type="button" data-toggle="search" aria-label="Collapse Search">
-            <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
-          </button> -->
         </div>
         <div class="panel__body">
-          <form class="search" id="searchForm" autocomplete="off">
-            <i class="fa-solid fa-magnifying-glass search__icon" aria-hidden="true"></i>
-            <input class="search__input" id="searchInput" type="text" placeholder="Search Google or type a URL" />
-            <button class="icon-btn" id="voiceBtn" type="button" aria-label="Voice search" title="Voice search">
-              <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-            </button>
-            <button class="btn search__btn" type="submit">
-              Go
+          <form class="shortcut-add" id="shortcutForm">
+            <input class="input" id="shortcutName" type="text" placeholder="Name" maxlength="30" />
+            <input class="input" id="shortcutUrl" type="text" placeholder="https://example.com" />
+            <button class="btn" type="submit">
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+              Add
             </button>
           </form>
+
+          <div class="shortcut-grid" id="shortcutGrid" aria-label="My shortcuts"></div>
+          <div class="muted" id="shortcutHint">Tip: Right-click (or long-press) a shortcut to delete.</div>
         </div>
       </div>
 
