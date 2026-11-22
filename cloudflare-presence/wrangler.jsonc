@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "custom-extension-presence",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-22",
+  "workers_dev": true,
+  "vars": {
+    "HEARTBEAT_TIMEOUT_MS": "75000"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PRESENCE_ROOM",
+        "class_name": "PresenceRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PresenceRoom"]
+    }
+  ]
+}

@@ -65,8 +65,8 @@
           </div>
           <div class="panel__body">
             <form class="question-add" id="questionForm">
-              <input class="input" id="questionInput" type="text" autocomplete="off" placeholder="Enter coding question name..."
-                maxlength="200" />
+              <input class="input" id="questionInput" type="text" autocomplete="off"
+                placeholder="Enter coding question name..." maxlength="200" />
               <button class="btn" type="submit" id="questionAddBtn">
                 <i class="fa-solid fa-plus" aria-hidden="true"></i>
                 Add
@@ -128,7 +128,40 @@
           </div>
         </div>
 
-        <div class="panel" data-panel="todos2">
+        <div class="panel presence-panel" data-panel="presence">
+          <div class="panel__header">
+            <div class="panel__title">
+              <i class="fa-solid fa-users" aria-hidden="true"></i>
+              Team Presence
+              <span class="badge badge--ghost" id="presenceCount">-- / --</span>
+            </div>
+          </div>
+          <div class="panel__body">
+            <div class="presence-list" id="presenceList" aria-live="polite">
+              <div class="presence-state">Loading presence…</div>
+            </div>
+            <div class="presence-footer">
+              <div class="presence-connection is-loading" id="presenceConnection">
+                <span class="presence-connection__dot"></span>
+                <span id="presenceConnectionText">Connecting</span>
+              </div>
+              <!-- <button class="icon-btn presence-config-toggle" id="presenceConfigToggle" type="button"
+                aria-label="Configure presence" title="Configure presence">
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
+              </button> -->
+            </div>
+            <form class="presence-config" id="presenceConfigForm" hidden>
+              <input class="input" id="presenceUserIdInput" type="text" maxlength="128" placeholder="Shared user ID"
+                aria-label="Shared user ID" />
+              <input class="input" id="presenceWsUrlInput" type="text"
+                placeholder="wss://custom-extension-presence.cp-custom-extension.workers.dev/ws"
+                aria-label="WebSocket URL" />
+              <button class="btn" type="submit">Connect</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- <div class="panel" data-panel="todos2">
           <div class="panel__header">
             <div class="panel__title">
               <i class="fa-solid fa-list-check" aria-hidden="true"></i>
@@ -149,7 +182,7 @@
 
             <div class="list" id="todoList2" aria-label="Todo list 2"></div>
           </div>
-        </div>
+        </div> -->
       </aside>
     </main>
 
