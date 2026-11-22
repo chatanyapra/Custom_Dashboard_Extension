@@ -1,0 +1,16 @@
+{
+  "name": "custom-extension-presence",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "dev:timeout": "wrangler dev --ip 127.0.0.1 --port 8788 --persist-to .wrangler/timeout-state --var HEARTBEAT_TIMEOUT_MS:3000",
+    "deploy": "wrangler deploy",
+    "test:smoke": "node test/smoke.mjs",
+    "test:timeout": "node test/timeout.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

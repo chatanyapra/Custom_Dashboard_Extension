@@ -1,18 +1,21 @@
 const STORAGE_DEFAULTS = {
   clientId: null,
   presenceUserId: null,
-  presenceWsUrl: "ws://localhost:3001/ws",
+  presenceWsUrl: "wss://custom-extension-presence.cp-custom-extension.workers.dev/ws",
   userName: "Devansh"
 };
 
 const HEARTBEAT_ALARM = "presence-heartbeat";
+const HEARTBEAT_INTERVAL_MS = 20_000;
 let socket = null;
 let socketUrl = STORAGE_DEFAULTS.presenceWsUrl;
 let reconnectTimer = null;
+let heartbeatTimer = null;
 let reconnectAttempt = 0;
 let connectionState = "disconnected";
 let lastUsers = [];
 let identity = null;
+let connectInProgress = false;
 
 function randomId() {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
@@ -43,6 +46,12 @@ async function ensureIdentity() {
   socketUrl = typeof saved.presenceWsUrl === "string" && saved.presenceWsUrl.trim()
     ? saved.presenceWsUrl.trim()
     : STORAGE_DEFAULTS.presenceWsUrl;
+  if (
+    socketUrl === "ws://localhost:3001/ws" ||
+    socketUrl === "wss://custom-extension-presence.cp-custdddddom-extension.workers.dev/ws"
+  ) {
+    socketUrl = STORAGE_DEFAULTS.presenceWsUrl;
+  }
 
   await storageSet({ clientId, presenceUserId, userName, presenceWsUrl: socketUrl });
   identity = { clientId, presenceUserId, userName };
@@ -60,7 +69,7 @@ function broadcastPresenceState(extra = {}) {
       ...extra
     }
   };
-  chrome.runtime.sendMessage(message).catch(() => {});
+  chrome.runtime.sendMessage(message).catch(() => { });
 }
 
 function setConnectionState(state) {
@@ -95,8 +104,45 @@ function heartbeat() {
   });
 }
 
-function scheduleReconnect() {
+function startHeartbeats() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeats() {
+  if (!heartbeatTimer) return;
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
+async function hasOpenBrowserWindow() {
+  const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
+  return windows.length > 0;
+}
+
+async function disconnectIfNoBrowserWindows() {
+  if (await hasOpenBrowserWindow()) return;
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  stopHeartbeats();
+
+  const previousSocket = socket;
+  socket = null;
+  if (previousSocket && previousSocket.readyState !== WebSocket.CLOSED) {
+    previousSocket.close();
+  }
+  setConnectionState("disconnected");
+}
+
+async function scheduleReconnect() {
   if (reconnectTimer) return;
+  if (!(await hasOpenBrowserWindow())) {
+    setConnectionState("disconnected");
+    return;
+  }
   setConnectionState("reconnecting");
 
   const base = 1000 * Math.pow(2, Math.min(reconnectAttempt, 5));
@@ -110,59 +156,76 @@ function scheduleReconnect() {
 }
 
 async function connect() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  if (connectInProgress || (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))) {
     return;
   }
 
-  await ensureIdentity();
-  setConnectionState(reconnectAttempt > 0 ? "reconnecting" : "connecting");
-
-  let nextSocket;
+  connectInProgress = true;
   try {
-    nextSocket = new WebSocket(socketUrl);
-  } catch {
-    scheduleReconnect();
-    return;
-  }
-
-  socket = nextSocket;
-
-  nextSocket.addEventListener("open", () => {
-    reconnectAttempt = 0;
-    setConnectionState("connected");
-    register();
-  });
-
-  nextSocket.addEventListener("message", (event) => {
-    let message;
-    try {
-      message = JSON.parse(event.data);
-    } catch {
+    if (!(await hasOpenBrowserWindow())) {
+      setConnectionState("disconnected");
       return;
     }
 
-    if (message.type === "USERS_LIST" && message.payload) {
-      const users = Array.isArray(message.payload.users) ? message.payload.users : [];
-      lastUsers = users.slice().sort((a, b) => {
-        if (a.status !== b.status) return a.status === "active" ? -1 : 1;
-        return String(a.name || "").localeCompare(String(b.name || ""));
-      });
-      broadcastPresenceState({
-        activeCount: Number(message.payload.activeCount) || lastUsers.filter((u) => u.status === "active").length,
-        totalCount: Number(message.payload.totalCount) || lastUsers.length
-      });
+    await ensureIdentity();
+    if (!(await hasOpenBrowserWindow())) {
+      setConnectionState("disconnected");
+      return;
     }
-  });
+    setConnectionState(reconnectAttempt > 0 ? "reconnecting" : "connecting");
 
-  nextSocket.addEventListener("close", () => {
-    if (socket === nextSocket) socket = null;
-    setConnectionState("disconnected");
-    scheduleReconnect();
-  });
+    let nextSocket;
+    try {
+      nextSocket = new WebSocket(socketUrl);
+    } catch {
+      await scheduleReconnect();
+      return;
+    }
 
-  nextSocket.addEventListener("error", () => {
-    // close will schedule the reconnect; this handler prevents unhandled errors.
-  });
+    socket = nextSocket;
+
+    nextSocket.addEventListener("open", () => {
+      reconnectAttempt = 0;
+      setConnectionState("connected");
+      startHeartbeats();
+      register();
+    });
+
+    nextSocket.addEventListener("message", (event) => {
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (message.type === "USERS_LIST" && message.payload) {
+        const users = Array.isArray(message.payload.users) ? message.payload.users : [];
+        lastUsers = users.slice().sort((a, b) => {
+          if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        });
+        broadcastPresenceState({
+          activeCount: Number(message.payload.activeCount) || lastUsers.filter((u) => u.status === "active").length,
+          totalCount: Number(message.payload.totalCount) || lastUsers.length
+        });
+      }
+    });
+
+    nextSocket.addEventListener("close", () => {
+      if (socket !== nextSocket) return;
+      stopHeartbeats();
+      socket = null;
+      setConnectionState("disconnected");
+      scheduleReconnect();
+    });
+
+    nextSocket.addEventListener("error", () => {
+      // close will schedule the reconnect; this handler prevents unhandled errors.
+    });
+  } finally {
+    connectInProgress = false;
+  }
 }
 
 async function updateName(name) {
@@ -177,9 +240,12 @@ async function updateName(name) {
 }
 
 async function updateIdentity(payload = {}) {
-  await ensureIdentity();
+  const currentIdentity = await ensureIdentity();
   const nextUrl = typeof payload.wsUrl === "string" ? payload.wsUrl.trim() : socketUrl;
-  const nextUserId = typeof payload.userId === "string" ? payload.userId.trim().slice(0, 128) : identity?.presenceUserId;
+  const requestedUserId = typeof payload.userId === "string"
+    ? payload.userId.trim().slice(0, 128)
+    : currentIdentity.presenceUserId;
+  const nextUserId = requestedUserId || currentIdentity.clientId;
 
   if (nextUrl) socketUrl = nextUrl;
   if (nextUserId) identity = { ...(identity || {}), presenceUserId: nextUserId };
@@ -234,12 +300,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.34 });
+  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.5 });
   ensureIdentity().then(connect);
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.34 });
+  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.5 });
   ensureIdentity().then(connect);
 });
 
@@ -249,7 +315,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   else heartbeat();
 });
 
+chrome.windows.onCreated.addListener(() => {
+  connect();
+});
+
+chrome.windows.onRemoved.addListener(() => {
+  disconnectIfNoBrowserWindows();
+});
+
 ensureIdentity().then(() => {
-  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.34 });
+  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.5 });
   connect();
 });

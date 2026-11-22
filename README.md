@@ -1,44 +1,20 @@
 # New Tab Dashboard (Chrome Extension)
 
-A Manifest V3 Chrome extension that replaces Chrome's New Tab page with a customizable dashboard and a lightweight real-time team presence system.
+A Manifest V3 extension that replaces Chrome's New Tab page with a customizable dashboard and a real-time team presence panel.
 
 ## Dashboard Features
 
-- Editable username
-- Live clock and date
+- Editable username; clock and date
 - Dark and light themes
 - Google search with URL detection and voice search
 - Coding Questions with 3, 7, and 15-day review tracking
-- Two independent To-Do lists
-- Two Notes sections with autosave and word counts
-- Custom bookmarks and shortcuts
-- AI Tools
-- Google Apps
+- Two independent To-Do lists and two Notes sections
+- Bookmarks and custom shortcuts
+- AI Tools and Google Apps
 - Bottom-dock popovers
-- Real-time team presence
+- Real-time team presence with connection state and active/inactive counts
 
-Existing dashboard data remains in `chrome.storage.local`; presence configuration and identity are stored separately in the same storage area.
-
-## Presence Architecture
-
-```text
-New Tab page -> popup.js -> chrome.runtime messaging
-                         -> background.js
-                         -> one WebSocket per browser profile
-                         -> Node.js Express + ws server
-                         -> in-memory PresenceManager
-                         -> broadcast to all extensions
-```
-
-- New Tab pages do not create WebSockets.
-- `background.js` owns the only WebSocket connection per browser profile.
-- Multiple New Tab pages receive presence updates through runtime messaging.
-- Closing one tab does not disconnect presence.
-- Browser focus, mouse activity, keyboard activity, and `chrome.idle` are not used.
-- Minimized Chrome and Chrome running in another application remains Active.
-- Closing all normal Chrome windows eventually makes the browser connection disappear.
-- A stale heartbeat or unexpected network crash is detected by server-side timeouts.
-- If the same `presenceUserId` is configured on multiple installations or connections, the server keeps one user entry and marks it Active while at least one connection is alive.
+Existing dashboard data remains in `chrome.storage.local`. The `new_design/` directory is an unused alternate implementation and is not changed.
 
 ## Project Structure
 
@@ -51,194 +27,129 @@ Custom_Extension/
 ├── background.js
 ├── README.md
 ├── images/
-├── server/
+├── cloudflare-presence/
 │   ├── package.json
-│   ├── .env.example
+│   ├── wrangler.jsonc
 │   ├── .gitignore
 │   └── src/
-│       ├── config.js
-│       ├── server.js
-│       ├── websocket.js
-│       └── presence-manager.js
-└── new_design/
-    ├── popup.css
-    └── popup.js
+│       ├── index.js
+│       └── presence-room.js
+├── server/                    # Legacy Node.js backend; retained, not used by Cloudflare setup
+└── new_design/                # Unused alternate UI
 ```
 
-`new_design/` is an older alternate implementation and is not loaded by the extension.
+## Presence Architecture
 
-## Local Backend Setup
+```text
+New Tab page -> popup.js -> chrome.runtime messaging
+                         -> background.js (one WebSocket per Chrome profile)
+                         -> Cloudflare Worker (/ws)
+                         -> one named Durable Object room
+                         -> broadcasts to connected extension profiles
+```
 
-Requirements:
+- Only `background.js` opens and manages the WebSocket; New Tab pages communicate with it through runtime messaging.
+- Each extension installation has a stable `clientId`. The configurable `presenceUserId` lets multiple installations represent one person.
+- Presence means browser availability. Minimized Chrome and switching applications remain Active; no idle, focus, mouse, or keyboard monitoring is used.
+- The Durable Object uses the WebSocket Hibernation API and per-socket attachments to restore active connection details after hibernation.
+- A Durable Object alarm detects expired application heartbeats without a continuously running interval. Hibernatable sockets remain connected while the Durable Object is idle.
+- Known display names are retained in Durable Object storage, while the dashboard lists only active users. No external database, login, or authentication is used.
+- The WebSocket heartbeat helps keep the Manifest V3 service worker alive and detects stale connections; it is not a Cloudflare protocol ping.
 
-- Node.js 18 or newer
-- Chrome or Chromium
+## Local Cloudflare Development
 
-Install and start the server:
+Requirements: Node.js 22+ for the installed Wrangler version and automated tests, and a Cloudflare account for deployment (local development does not require login).
 
 ```powershell
-cd "C:\Web Development\Custom_Extension\server"
+cd "C:\Web Development\Custom_Extension\cloudflare-presence"
 npm install
-npm start
+npm run dev
 ```
 
-The server listens on `0.0.0.0:3001` by default.
-
-Health check:
+Local endpoints:
 
 ```text
-http://localhost:3001/health
+Health:    http://localhost:8787/health
+WebSocket: ws://localhost:8787/ws
 ```
 
-WebSocket endpoint:
+The first local run initializes Wrangler's local Durable Object state under `.wrangler/`. Local development verifies protocol behavior; production hibernation behavior is provided by Cloudflare's runtime.
+
+The configured heartbeat timeout is `HEARTBEAT_TIMEOUT_MS=75000` (75 seconds). For a fast local alarm-path check, use a second terminal:
+
+```powershell
+npm run dev:timeout
+npm run test:timeout
+```
+
+The regular smoke test covers registration, broadcast, same-user aggregation, name updates, counts, and disconnect status:
+
+```powershell
+npm run test:smoke
+```
+
+The smoke scripts leave inactive test-user names in Wrangler's local Durable Object state, matching production's inactive-user behavior.
+
+## Deploy to Cloudflare Workers
+
+1. Create/sign in to a Cloudflare account and enable a `workers.dev` subdomain.
+2. In a terminal, run:
+
+```powershell
+cd "C:\Web Development\Custom_Extension\cloudflare-presence"
+npm install
+npx wrangler login
+npm run deploy
+```
+
+Wrangler creates the SQLite-backed `PresenceRoom` Durable Object using the `v1` migration in `wrangler.jsonc`. Deployment must be authorized from the developer's terminal; it is not performed automatically.
+
+The production hostname is based on the configured Worker name and your Cloudflare subdomain, for example:
 
 ```text
-ws://localhost:3001/ws
+Health:    https://custom-extension-presence.YOUR-SUBDOMAIN.workers.dev/health
+WebSocket: wss://custom-extension-presence.YOUR-SUBDOMAIN.workers.dev/ws
 ```
 
-Optional environment values can be copied from `.env.example`:
-
-```text
-PORT=3001
-HEARTBEAT_TIMEOUT_MS=75000
-PING_INTERVAL_MS=25000
-```
-
-Do not commit `.env`.
-
-## Load the Extension
-
-1. Open `chrome://extensions`.
-2. Enable Developer mode.
-3. Click **Load unpacked**.
-4. Select `C:\Web Development\Custom_Extension`.
-5. Open a new tab.
-
-The presence panel initially shows `Loading presence…` or `Connecting`.
-
-## Configure the WebSocket URL
-
-The default local URL is `ws://localhost:3001/ws`.
-
-Open the gear button in the Team Presence panel to configure:
-
-- **Shared user ID:** optional. Use the same value on installations that represent the same person.
-- **WebSocket URL:** use `ws://` locally or `wss://` for HTTPS/Render deployment.
-
-Values are stored in `chrome.storage.local`:
-
-- `clientId`: unique installation identity
-- `presenceUserId`: shared/merged user identity
-- `presenceWsUrl`: WebSocket endpoint
-- `userName`: display name reused from the dashboard
-
-The presence panel can also be reached through the existing top-bar username. Clicking the username opens the name editor, and name changes are re-registered with the server.
-
-## WebSocket Protocol
-
-Client registration:
+Use the exact hostname printed by Wrangler. Confirm `/health` returns:
 
 ```json
-{
-  "type": "REGISTER",
-  "payload": {
-    "userId": "chatanya",
-    "clientId": "unique-installation-id",
-    "name": "Chatanya"
-  }
-}
+{"status":"ok","service":"presence-server"}
 ```
 
-Client heartbeat:
+## Configure Chrome
 
-```json
-{
-  "type": "HEARTBEAT",
-  "payload": {
-    "clientId": "unique-installation-id"
-  }
-}
-```
+1. Open `chrome://extensions`, enable Developer mode, and select **Load unpacked**.
+2. Choose `C:\Web Development\Custom_Extension`.
+3. Open a New Tab and use the gear button in **Team Presence**.
+4. The WebSocket URL defaults to `wss://custom-extension-presence.cp-custom-extension.workers.dev/ws`. Change it only if using a different deployment or local development server.
+5. Optionally enter a **Shared user ID**. Use the same ID on multiple installations for one person's aggregated presence; different people should use different IDs.
+6. Click **Connect**. The existing dashboard username is used as the display name.
 
-Server user list:
+The extension connects to the production WebSocket by default. For local development, enter `ws://localhost:8787/ws` in the presence settings. The old `ws://localhost:3001/ws` default and the previous mistyped production hostname are automatically updated to the production URL. Other explicitly configured URLs are preserved. The manifest still permits the legacy local Node endpoint and `*.onrender.com` during migration. Reload the unpacked extension after manifest changes.
 
-```json
-{
-  "type": "USERS_LIST",
-  "payload": {
-    "users": [
-      {
-        "userId": "chatanya",
-        "name": "Chatanya",
-        "status": "active"
-      }
-    ],
-    "activeCount": 1,
-    "totalCount": 1
-  }
-}
-```
+## Test Multiple Users
 
-The server also sends `REGISTERED` and `ERROR` messages.
+1. Start `npm run dev`, then configure the extension with `ws://localhost:8787/ws`.
+2. Confirm one user appears Active.
+3. Open several New Tab pages in that profile; there should still be one browser-profile connection/user.
+4. Load the extension in a second Chrome profile and set a different name/ID. Confirm both users appear and counts update without refresh.
+5. Minimize Chrome or switch applications; presence should remain Active.
+6. Close all normal Chrome windows in that profile. The extension closes its WebSocket and the user becomes Inactive; if the network is disconnected or the connection is lost without a close notification, the server-side heartbeat timeout is nominally 75 seconds.
+7. Reopen Chrome or restore the network and confirm automatic reconnect/registration.
+8. For deployment verification, repeat against the deployed `wss://...workers.dev/ws` URL.
 
-## Deploy to Render
+## Legacy Node Backend
 
-Create a Render Web Service from this repository.
+The prior Express/`ws` backend remains in `server/` so it is not removed before the Cloudflare backend is verified. It is not used by the Cloudflare configuration. The old local URL `ws://localhost:3001/ws` is supported only if a user explicitly configures it; local development should now use Wrangler on port `8787`.
 
-Use:
+## Troubleshooting and Limits
 
-```text
-Root Directory: server
-Build Command: npm install
-Start Command: npm start
-```
-
-Set `PORT` automatically through Render. Optional variables:
-
-```text
-HEARTBEAT_TIMEOUT_MS=75000
-PING_INTERVAL_MS=25000
-```
-
-After deployment, obtain the Render URL and configure the extension with:
-
-```text
-wss://YOUR-RENDER-DOMAIN.onrender.com/ws
-```
-
-Render free instances may spin down when idle. Regular client heartbeats keep a connected browser active, but a cold-starting server may briefly show the extension as disconnected. After restart, connected clients reconnect and register automatically.
-
-## Testing Two or More Users
-
-1. Start the backend.
-2. Load the extension in a Chrome profile.
-3. Set the username and open a New Tab page.
-4. Confirm the user appears Active.
-5. Open another New Tab page and confirm no duplicate entry appears.
-6. Minimize Chrome and switch applications; it should remain Active.
-7. Load the extension in a second Chrome profile or configure another installation with a different shared/user ID.
-8. Confirm Active users are sorted first and counts match.
-9. Close all normal windows in a profile and wait for heartbeat timeout; that user should become Inactive.
-10. Restart or stop the backend and verify reconnect state, then restart and confirm the user registers again.
-
-## Troubleshooting
-
-- **Always Disconnected:** confirm the server is running and the configured URL includes `/ws`.
-- **Local URL fails:** use `ws://localhost:3001/ws`. The browser profile must be on the same machine as the server.
-- **Render URL fails:** use `wss://`, not `ws://`, and confirm the Render service is running.
-- **Duplicate people:** configure the same `Shared user ID` for the intended person.
-- **Duplicate client connections:** this is handled by server aggregation; New Tab pages must not add another connection.
-- **User remains Active:** network shutdown is detected by stale timeout, not instantly. The default timeout is 75 seconds.
-- **Server restarts:** presence state is reset because it is in memory. Clients reconnect and register again.
-- **CSP or console errors:** reload the unpacked extension after changing `manifest.json`.
-
-## Storage and Limitations
-
-The presence server uses only an in-memory JavaScript `Map`. It has no database or persistent user records.
-
-Known limitations:
-
-- Server restart clears the current presence list.
-- Presence is not guaranteed to be available during Render spin-down or provider downtime.
-- Closing all browser windows is detected best-effort; unexpected crashes rely on heartbeat timeout.
-- Client IDs and names are not authentication credentials and are intended for a trusted group.
+- **Disconnected locally:** ensure `npm run dev` is running and configure `ws://localhost:8787/ws`.
+- **Disconnected in production:** use the exact Wrangler hostname and `wss://`, ending in `/ws`; confirm `/health` responds.
+- **Connection blocked by CSP:** this extension permits local port `8787` and `*.workers.dev` WebSocket endpoints. Reload the extension after changing its manifest.
+- **Users do not merge:** set the same Shared user ID on those installations.
+- **User remains Active briefly after disconnect:** detection is not instantaneous; allow up to the heartbeat timeout plus alarm scheduling delay.
+- **After a deployment/restart:** clients reconnect and register again. User display names remain in the Durable Object's internal storage.
+- Cloudflare plan limits, execution/billing policies, and `workers.dev` availability may change; verify current Cloudflare limits for your account. This setup does not guarantee uninterrupted availability.
+- Client IDs and display names are identifiers, not authentication. Use this prototype only with a trusted group.

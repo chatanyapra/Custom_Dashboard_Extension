@@ -17,7 +17,7 @@ const DEFAULTS = {
     theme: "dark",
     userName: "Devansh",
     presenceUserId: "",
-    presenceWsUrl: "ws://localhost:3001/ws",
+    presenceWsUrl: "wss://custom-extension-presence.cp-custom-extension.workers.dev/ws",
     collapsed: {
         aiTools: false,
         todos: false,
@@ -277,7 +277,8 @@ function renderPresence(payload = {}) {
     const count = $("presenceCount");
     if (!list) return;
 
-    const users = Array.isArray(payload.users) ? payload.users : [];
+    const allUsers = Array.isArray(payload.users) ? payload.users : [];
+    const users = allUsers.filter((user) => user.status === "active");
     users.sort((a, b) => {
         if (a.status !== b.status) return a.status === "active" ? -1 : 1;
         return String(a.name || "").localeCompare(String(b.name || ""));
@@ -285,8 +286,8 @@ function renderPresence(payload = {}) {
 
     const activeCount = typeof payload.activeCount === "number"
         ? payload.activeCount
-        : users.filter((user) => user.status === "active").length;
-    const totalCount = typeof payload.totalCount === "number" ? payload.totalCount : users.length;
+        : users.length;
+    const totalCount = typeof payload.totalCount === "number" ? payload.totalCount : allUsers.length;
 
     if (count) count.textContent = getPresenceCountText(activeCount, totalCount);
     setPresenceConnectionState(payload.connectionState || "disconnected");
@@ -296,7 +297,7 @@ function renderPresence(payload = {}) {
         const empty = document.createElement("div");
         empty.className = "presence-state";
         empty.textContent = payload.connectionState === "connected"
-            ? "No users are registered."
+            ? "No active users."
             : "Presence is unavailable.";
         list.appendChild(empty);
         return;
