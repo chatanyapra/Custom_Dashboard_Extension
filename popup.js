@@ -1,6 +1,8 @@
 const STORAGE_KEYS = {
     theme: "theme",
     userName: "userName",
+    presenceUserId: "presenceUserId",
+    presenceWsUrl: "presenceWsUrl",
     collapsed: "collapsed",
     todos: "todos",
     todos2: "todos2",
@@ -14,6 +16,8 @@ const STORAGE_KEYS = {
 const DEFAULTS = {
     theme: "dark",
     userName: "Devansh",
+    presenceUserId: "",
+    presenceWsUrl: "ws://localhost:3001/ws",
     collapsed: {
         aiTools: false,
         todos: false,
@@ -243,6 +247,156 @@ function setUserName(name) {
     return safe;
 }
 
+function getPresenceCountText(activeCount, totalCount) {
+    return `${Number(activeCount) || 0} / ${Number(totalCount) || 0}`;
+}
+
+function setPresenceConnectionState(connectionState) {
+    const indicator = $("presenceConnection");
+    const text = $("presenceConnectionText");
+    if (!indicator || !text) return;
+
+    indicator.className = "presence-connection";
+    if (connectionState === "connected") {
+        indicator.classList.add("is-connected");
+        text.textContent = "Connected";
+    } else if (connectionState === "reconnecting") {
+        indicator.classList.add("is-reconnecting");
+        text.textContent = "Reconnecting";
+    } else if (connectionState === "connecting") {
+        indicator.classList.add("is-loading");
+        text.textContent = "Connecting";
+    } else {
+        indicator.classList.add("is-disconnected");
+        text.textContent = "Disconnected";
+    }
+}
+
+function renderPresence(payload = {}) {
+    const list = $("presenceList");
+    const count = $("presenceCount");
+    if (!list) return;
+
+    const users = Array.isArray(payload.users) ? payload.users : [];
+    users.sort((a, b) => {
+        if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+
+    const activeCount = typeof payload.activeCount === "number"
+        ? payload.activeCount
+        : users.filter((user) => user.status === "active").length;
+    const totalCount = typeof payload.totalCount === "number" ? payload.totalCount : users.length;
+
+    if (count) count.textContent = getPresenceCountText(activeCount, totalCount);
+    setPresenceConnectionState(payload.connectionState || "disconnected");
+
+    list.innerHTML = "";
+    if (users.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "presence-state";
+        empty.textContent = payload.connectionState === "connected"
+            ? "No users are registered."
+            : "Presence is unavailable.";
+        list.appendChild(empty);
+        return;
+    }
+
+    for (const user of users) {
+        const row = document.createElement("div");
+        const active = user.status === "active";
+        row.className = `presence-user${active ? " is-active" : " is-inactive"}`;
+
+        const indicator = document.createElement("span");
+        indicator.className = "presence-user__indicator";
+        indicator.setAttribute("aria-hidden", "true");
+
+        const name = document.createElement("span");
+        name.className = "presence-user__name";
+        name.textContent = String(user.name || "Unknown").slice(0, 30);
+
+        const status = document.createElement("span");
+        status.className = "presence-user__status";
+        status.textContent = active ? "Active" : "Inactive";
+
+        row.append(indicator, name, status);
+        list.appendChild(row);
+    }
+}
+
+async function notifyPresenceNameChanged(name) {
+    try {
+        await chrome.runtime.sendMessage({
+            type: "PRESENCE_UPDATE_NAME",
+            payload: { name }
+        });
+    } catch (e) {
+        console.warn("Presence name update failed", e);
+    }
+}
+
+function bindPresence(state) {
+    const toggle = $("presenceConfigToggle");
+    const form = $("presenceConfigForm");
+    const userIdInput = $("presenceUserIdInput");
+    const wsUrlInput = $("presenceWsUrlInput");
+
+    if (toggle && form) {
+        toggle.addEventListener("click", () => {
+            form.hidden = !form.hidden;
+            if (!form.hidden) wsUrlInput?.focus();
+        });
+    }
+
+    chrome.storage.local.get({
+        [STORAGE_KEYS.presenceUserId]: DEFAULTS.presenceUserId,
+        [STORAGE_KEYS.presenceWsUrl]: DEFAULTS.presenceWsUrl
+    }).then((saved) => {
+        if (userIdInput) userIdInput.value = saved[STORAGE_KEYS.presenceUserId] || "";
+        if (wsUrlInput) wsUrlInput.value = saved[STORAGE_KEYS.presenceWsUrl] || DEFAULTS.presenceWsUrl;
+    }).catch((e) => console.warn("Could not load presence configuration", e));
+
+    if (form) {
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const wsUrl = wsUrlInput?.value.trim() || "";
+            const userId = userIdInput?.value.trim() || "";
+
+            if (!/^wss?:\/\/.+/i.test(wsUrl)) {
+                toast("Use a ws:// or wss:// WebSocket URL", "warn");
+                return;
+            }
+
+            try {
+                await chrome.runtime.sendMessage({
+                    type: "PRESENCE_UPDATE_CONFIG",
+                    payload: { wsUrl, userId }
+                });
+                state.presenceUserId = userId;
+                state.presenceWsUrl = wsUrl;
+                toast("Presence connection updated", "success");
+            } catch (e) {
+                console.error("Presence configuration update failed", e);
+                toast("Could not update presence connection", "error");
+            }
+        });
+    }
+
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message?.type === "PRESENCE_STATE_CHANGED") {
+            renderPresence(message.payload || {});
+        }
+    });
+
+    chrome.runtime.sendMessage({ type: "PRESENCE_GET_STATE" }).then((response) => {
+        if (response?.type === "PRESENCE_STATE") {
+            renderPresence(response.payload || {});
+        }
+    }).catch(() => {
+        renderPresence({ connectionState: "disconnected", users: [] });
+    });
+}
+
 function bindUserNameEditor(state) {
     const el = $("userName");
     if (!el) return;
@@ -258,6 +412,7 @@ function bindUserNameEditor(state) {
         state.userName = next;
         setUserName(next);
         await storageSet({ [STORAGE_KEYS.userName]: next });
+        await notifyPresenceNameChanged(next);
         toast("Name updated", "success");
     });
 }
@@ -1370,6 +1525,8 @@ async function init() {
     const state = {
         theme: DEFAULTS.theme,
         userName: DEFAULTS.userName,
+        presenceUserId: DEFAULTS.presenceUserId,
+        presenceWsUrl: DEFAULTS.presenceWsUrl,
         collapsed: { ...DEFAULTS.collapsed },
         todos: [...DEFAULTS.todos],
         todos2: [...DEFAULTS.todos2],
@@ -1418,6 +1575,7 @@ async function init() {
 
     bindThemeToggle(state);
     bindUserNameEditor(state);
+    bindPresence(state);
     bindCollapsibles(state);
     bindDockPopovers();
     bindTopbarSearch();
